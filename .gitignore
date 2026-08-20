@@ -17,6 +17,9 @@ deploy/*/data/*
 deploy/*/data/media/*
 !deploy/*/data/media/.gitkeep
 
+# sqlite databases anywhere (db + wal/shm journals)
+*.db*
+
 # secrets
 .env
 !.env.example

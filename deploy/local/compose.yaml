@@ -15,6 +15,12 @@ services:
     ports:
       - '8080:8080'
     restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:8080/api/health || exit 1']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   site:
     build:
@@ -26,5 +32,12 @@ services:
     ports:
       - '3000:3000'
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3000/ || exit 1']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s

@@ -5,7 +5,10 @@ services:
     build:
       context: ../..
       dockerfile: deploy/dev/docker/api.dockerfile
-    env_file: ./docker/.env
+    # optional: copy docker/.env.example to docker/.env to override dev defaults
+    env_file:
+      - path: ./docker/.env
+        required: false
     environment:
       PORT: '8080'
       DATA_DIR: /data
@@ -16,6 +19,13 @@ services:
       - api-gocache:/root/.cache/go-build
     ports:
       - '8080:8080'
+    healthcheck:
+      # air rebuilds the binary on start (and on every change), so keep a generous start_period
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:8080/api/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   site:
     build:

@@ -7,3 +7,8 @@ apps/api/tmp
 deploy/*/data
 *.log
 .DS_Store
+
+# secrets (examples stay in the context)
+.env
+**/.env
+!**/.env.example
