@@ -1,6 +1,10 @@
 'apps/api/**/*.go':
   - gofmt -w
 
+# lint-staged passes absolute paths; eslint is installed in apps/site
+'apps/site/**/*.{ts,vue}':
+  - cd apps/site && ./node_modules/.bin/eslint --fix
+
 'apps/site/**/*.{js,ts,vue,css,json}':
   - prettier --write
 

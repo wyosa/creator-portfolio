@@ -114,6 +114,22 @@ tasks:
     cmds:
       - npm run typecheck
 
+  site:lint:
+    desc: Lint site (eslint)
+    dir: apps/site
+    env:
+      NUXT_TELEMETRY_DISABLED: '1'
+    cmds:
+      - npm run lint
+
+  site:test:
+    desc: Run site unit tests (vitest)
+    dir: apps/site
+    env:
+      NUXT_TELEMETRY_DISABLED: '1'
+    cmds:
+      - npm run test
+
   ## ---------- misc ----------
 
   setup:
@@ -125,8 +141,8 @@ tasks:
           NUXT_TELEMETRY_DISABLED: '1'
 
   test:
-    desc: Run all host-side checks (api tests + site typecheck + site build)
-    deps: [api:vet, api:test, site:typecheck, site:build]
+    desc: Run all host-side checks (api tests + site lint/tests + typecheck + build)
+    deps: [api:vet, api:test, site:lint, site:test, site:typecheck, site:build]
 
   ps:
     desc: Show running containers of both stacks
