@@ -37,6 +37,14 @@ function onKeydown(e: KeyboardEvent) {
 
 useBodyScrollLock(computed(() => props.index !== null))
 
+/* keep tab focus inside the open lightbox, restore it on close */
+const { t } = useI18n()
+const root = ref<HTMLElement | null>(null)
+useFocusTrap(
+  root,
+  computed(() => props.index !== null),
+)
+
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
@@ -46,13 +54,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     <Transition name="lightbox">
       <div
         v-if="current"
+        ref="root"
         class="lightbox"
         role="dialog"
         aria-modal="true"
         :aria-label="current.title || 'media viewer'"
         @click.self="emit('close')"
       >
-        <button type="button" class="lightbox__close" aria-label="close" @click="emit('close')">
+        <button
+          type="button"
+          class="lightbox__close"
+          :aria-label="t('close')"
+          @click="emit('close')"
+        >
           <svg
             width="18"
             height="18"
@@ -70,7 +84,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           v-if="many"
           type="button"
           class="lightbox__chevron lightbox__chevron--prev"
-          aria-label="previous"
+          :aria-label="t('previous')"
           @click="prev"
         >
           <svg
@@ -117,7 +131,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           v-if="many"
           type="button"
           class="lightbox__chevron lightbox__chevron--next"
-          aria-label="next"
+          :aria-label="t('next')"
           @click="next"
         >
           <svg

@@ -7,16 +7,23 @@
     "build": "nuxt build",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "dependencies": {
-    "dompurify": "^3.4.13",
+    "isomorphic-dompurify": "^3.22.0",
     "marked": "^18.0.10",
     "nuxt": "^3.17.7"
   },
   "devDependencies": {
+    "@nuxt/eslint": "^1.17.0",
     "@types/node": "^26.2.0",
+    "@vue/test-utils": "^2.4.11",
+    "eslint": "^9.39.1",
+    "happy-dom": "^20.0.11",
     "typescript": "^5.8.3",
+    "vitest": "^3.2.4",
     "vue-tsc": "^3.0.4"
   }
 }

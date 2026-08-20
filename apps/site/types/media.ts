@@ -7,6 +7,8 @@ export interface MediaItem {
   type: MediaType
   source: MediaSource
   path: string
+  /** tiny blurred placeholder; absent on older records (derived by extension then) */
+  thumb?: string
   external_id: string
   title: string
   description: string

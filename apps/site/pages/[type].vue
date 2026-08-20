@@ -7,7 +7,7 @@ const route = useRoute()
 const { t } = useI18n()
 
 const pageType = computed(() => (route.params.type === 'film' ? 'film' : 'photo'))
-usePageTitle(() => t(pageType.value))
+useSeo(() => t(pageType.value))
 
 const { data: all, error } = await useMedia()
 const items = computed(() =>
@@ -28,11 +28,13 @@ watch(pageType, () => {
 </script>
 
 <template>
-  <p v-if="error" class="tiny feed-error">{{ t('unavailable') }}</p>
-  <template v-else>
-    <h1 class="page-title">{{ t(pageType) }}</h1>
-    <MediaGrid :items="items" />
-  </template>
+  <div>
+    <p v-if="error" class="tiny feed-error">{{ t('unavailable') }}</p>
+    <template v-else>
+      <h1 class="page-title">{{ t(pageType) }}</h1>
+      <MediaGrid :items="items" />
+    </template>
+  </div>
 </template>
 
 <style scoped>

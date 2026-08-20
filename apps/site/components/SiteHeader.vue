@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { MessageKey } from '~/i18n/messages'
+
 const menuOpen = ref(false)
 const route = useRoute()
 
@@ -18,7 +20,7 @@ const hasFeatured = computed(() => (allMedia.value ?? []).some((m) => m.featured
 const hasVideo = computed(() => (allMedia.value ?? []).some((m) => m.type === 'video'))
 const hasPhoto = computed(() => (allMedia.value ?? []).some((m) => m.type === 'photo'))
 
-const navLinks = computed(() => [
+const navLinks = computed<{ to: string; labelKey: MessageKey; show: boolean }[]>(() => [
   { to: '/', labelKey: 'featured', show: hasFeatured.value },
   { to: '/film', labelKey: 'film', show: hasVideo.value },
   { to: '/photo', labelKey: 'photo', show: hasPhoto.value },
@@ -77,7 +79,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         class="site-header__burger"
         :class="{ 'site-header__burger--open': menuOpen }"
         :aria-expanded="menuOpen"
-        aria-label="toggle menu"
+        :aria-label="t('toggleMenu')"
         @click="menuOpen = !menuOpen"
       >
         <span /><span />

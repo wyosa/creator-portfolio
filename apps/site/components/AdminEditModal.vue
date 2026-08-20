@@ -4,6 +4,7 @@ import type { MediaItem } from '~/types/media'
 const props = defineProps<{ item: MediaItem }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 
+const api = useApi()
 const { data: settings } = useSettings()
 const langs = computed(() =>
   settings.value?.languages?.length ? settings.value.languages : ['en'],
@@ -40,7 +41,7 @@ async function save() {
   busy.value = true
   error.value = ''
   try {
-    await $fetch(`/api/media/${props.item.id}`, {
+    await api(`/api/media/${props.item.id}`, {
       method: 'PUT',
       body: {
         title: (trForm.title[primaryLang.value] ?? '').trim(),
@@ -55,8 +56,8 @@ async function save() {
     })
     emit('saved')
     emit('close')
-  } catch {
-    error.value = 'save failed'
+  } catch (e) {
+    error.value = e instanceof ApiError && e.status === 429 ? e.message : 'save failed'
   } finally {
     busy.value = false
   }
@@ -70,10 +71,11 @@ async function onPreviewPicked(e: Event) {
   busy.value = true
   error.value = ''
   try {
-    const { path } = await uploadFile(file)
+    const { path } = await uploadFile(file, api)
     previewPath.value = path
-  } catch {
-    error.value = 'preview upload failed'
+  } catch (err) {
+    error.value =
+      err instanceof ApiError && err.status === 429 ? err.message : 'preview upload failed'
   } finally {
     busy.value = false
   }
@@ -83,6 +85,11 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') emit('close')
 }
 
+/* modal behavior: trap tab focus inside, lock the background scroll */
+const root = ref<HTMLElement | null>(null)
+useFocusTrap(root, ref(true))
+useBodyScrollLock(ref(true))
+
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
@@ -90,6 +97,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 <template>
   <Teleport to="body">
     <div
+      ref="root"
       class="emodal"
       role="dialog"
       aria-modal="true"

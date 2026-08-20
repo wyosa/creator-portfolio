@@ -4,21 +4,19 @@ import type { MediaItem } from '~/types/media'
 const props = withDefaults(defineProps<{ item: MediaItem; fixed?: boolean }>(), { fixed: false })
 const emit = defineEmits<{ open: []; measure: [id: number, width: number, height: number] }>()
 
-/* markdown description (per-locale), rendered + sanitized client-side only */
-const { pick, locale } = useI18n()
-const descHtml = ref('')
-
-function renderDesc() {
+/* markdown description (per-locale), rendered + sanitized isomorphically */
+const { pick, t } = useI18n()
+const descHtml = computed(() => {
   const d = pick(props.item.translations?.description, props.item.description)?.trim()
-  descHtml.value = d ? renderMarkdown(d) : ''
-}
-
-onMounted(renderDesc)
-watch(locale, renderDesc)
+  return d ? renderMarkdown(d) : ''
+})
 
 /* --- photos: tiny blurred placeholder until the full image loads --- */
 
-const thumbSrc = computed(() => props.item.path.replace(/\.[a-z0-9]+$/i, '.thumb.jpg'))
+/* thumb path from the api (new records); extension guess for old ones */
+const thumbSrc = computed(
+  () => props.item.thumb || props.item.path.replace(/\.[a-z0-9]+$/i, '.thumb.jpg'),
+)
 const thumbOk = ref(true)
 const loaded = ref(false)
 
@@ -176,11 +174,12 @@ onBeforeUnmount(() => {
       type="button"
       class="media-item__click"
       :class="{ 'media-item__click--zoom': item.type === 'photo' }"
-      :aria-label="item.type === 'photo' ? 'open photo' : 'play video with sound'"
+      :aria-label="item.type === 'photo' ? t('openPhoto') : t('playVideo')"
       @click="$emit('open')"
     />
 
     <div v-if="descHtml" class="media-item__desc">
+      <!-- eslint-disable-next-line vue/no-v-html -- descHtml is sanitized by renderMarkdown -->
       <div class="media-item__desc-inner" v-html="descHtml" />
     </div>
 

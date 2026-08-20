@@ -4,8 +4,15 @@ export default defineNuxtConfig({
   ssr: true,
   devtools: { enabled: false },
   compatibilityDate: '2025-08-01',
+  modules: ['@nuxt/eslint'],
   css: ['~/assets/css/main.css'],
   components: [{ path: '~/components/admin', pathPrefix: false }, '~/components'],
+  runtimeConfig: {
+    public: {
+      // absolute origin used for og:url/og:image (NUXT_PUBLIC_SITE_URL in env)
+      siteUrl: 'http://localhost:3000',
+    },
+  },
   routeRules: {
     '/api/**': { proxy: `${apiProxy}/api/**` },
     '/media/**': { proxy: `${apiProxy}/media/**` },

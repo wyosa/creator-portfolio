@@ -28,10 +28,13 @@ export function mediaLabel(item: MediaItem): string {
 }
 
 /** upload a single file; resolves to the stored paths and dimensions */
-export async function uploadFile(file: File): Promise<UploadResponse> {
+export async function uploadFile(
+  file: File,
+  api: <T = unknown>(url: string, opts?: Parameters<typeof $fetch>[1]) => Promise<T> = $fetch,
+): Promise<UploadResponse> {
   const form = new FormData()
   form.append('file', file)
-  return $fetch<UploadResponse>('/api/upload', { method: 'POST', body: form })
+  return api<UploadResponse>('/api/upload', { method: 'POST', body: form })
 }
 
 /**

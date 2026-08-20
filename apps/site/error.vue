@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import type { NuxtError } from '#app'
 
-defineProps<{ error: NuxtError }>()
+const props = defineProps<{ error: NuxtError }>()
 
 const { t } = useI18n()
-usePageTitle(() => t('pageNotFound'))
+/* 404 has its own text; anything else is a generic error */
+const msgKey = computed(() =>
+  (props.error?.statusCode ?? 404) === 404 ? 'pageNotFound' : 'somethingWentWrong',
+)
+usePageTitle(() => t(msgKey.value))
 </script>
 
 <template>
   <div class="err">
     <p class="err__code">{{ error?.statusCode ?? 404 }}</p>
-    <p class="err__msg">{{ t('pageNotFound') }}</p>
+    <p class="err__msg">{{ t(msgKey) }}</p>
     <NuxtLink to="/" class="err__link">{{ t('backHome') }}</NuxtLink>
   </div>
 </template>

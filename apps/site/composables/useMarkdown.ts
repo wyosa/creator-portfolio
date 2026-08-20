@@ -1,9 +1,10 @@
 import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import DOMPurify from 'isomorphic-dompurify'
 
 /**
  * Render markdown to sanitized html. Links open in a new tab.
- * Client-side only (DOMPurify needs a DOM) — call from onMounted.
+ * Isomorphic: works during SSR (jsdom-backed on the server via
+ * isomorphic-dompurify's node export, plain window dompurify on the client).
  */
 export function renderMarkdown(md: string): string {
   if (!md.trim()) return ''

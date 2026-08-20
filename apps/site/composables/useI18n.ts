@@ -1,65 +1,11 @@
 import type { ComputedRef } from 'vue'
 import { SUPPORTED_LOCALES, type Locale } from '~/types/i18n'
-
-const messages: Record<Locale, Record<string, string>> = {
-  en: {
-    featured: 'featured',
-    film: 'film',
-    photo: 'photo',
-    info: 'info',
-    all: 'all',
-    pageNotFound: 'page not found',
-    backHome: 'back home',
-    nothingHere: 'nothing here yet',
-    unavailable: 'temporarily unavailable, please try again later',
-  },
-  ru: {
-    featured: 'избранное',
-    film: 'видео',
-    photo: 'фото',
-    info: 'инфо',
-    all: 'всё',
-    pageNotFound: 'страница не найдена',
-    backHome: 'на главную',
-    nothingHere: 'пока пусто',
-    unavailable: 'временно недоступно, попробуйте позже',
-  },
-  es: {
-    featured: 'destacados',
-    film: 'vídeo',
-    photo: 'foto',
-    info: 'info',
-    all: 'todo',
-    pageNotFound: 'página no encontrada',
-    backHome: 'volver al inicio',
-    nothingHere: 'aún no hay nada',
-    unavailable: 'temporalmente no disponible, inténtalo más tarde',
-  },
-  et: {
-    featured: 'valitud',
-    film: 'film',
-    photo: 'foto',
-    info: 'info',
-    all: 'kõik',
-    pageNotFound: 'lehte ei leitud',
-    backHome: 'avalehele',
-    nothingHere: 'siia pole veel midagi lisatud',
-    unavailable: 'ajutiselt kättesaamatu, proovi hiljem uuesti',
-  },
-  de: {
-    featured: 'ausgewählt',
-    film: 'film',
-    photo: 'foto',
-    info: 'info',
-    all: 'alles',
-    pageNotFound: 'seite nicht gefunden',
-    backHome: 'zur startseite',
-    nothingHere: 'noch nichts hier',
-    unavailable: 'vorübergehend nicht verfügbar, bitte später erneut versuchen',
-  },
-}
+import { messages, pickTranslation, type MessageKey } from '~/i18n/messages'
 
 const STORAGE_KEY = 'site-locale'
+
+/* read the saved locale from localStorage once per app, not per useI18n() call */
+let storageInitHooked = false
 
 export function useI18n() {
   const { data: settings } = useSettings()
@@ -86,21 +32,24 @@ export function useI18n() {
     preferred.value = headers['accept-language'] ?? null
   }
 
-  onMounted(() => {
-    if (manual.value) return
-    let saved: string | null = null
-    try {
-      saved = localStorage.getItem(STORAGE_KEY)
-    } catch {
-      saved = null
-    }
-    if (saved) {
-      preferred.value = saved
-      manual.value = true
-      return
-    }
-    if (preferred.value === null) preferred.value = navigator.language
-  })
+  if (import.meta.client && !storageInitHooked) {
+    storageInitHooked = true
+    onMounted(() => {
+      if (manual.value) return
+      let saved: string | null
+      try {
+        saved = localStorage.getItem(STORAGE_KEY)
+      } catch {
+        saved = null
+      }
+      if (saved) {
+        preferred.value = saved
+        manual.value = true
+        return
+      }
+      if (preferred.value === null) preferred.value = navigator.language
+    })
+  }
 
   const locale: ComputedRef<Locale> = computed(() => {
     const act = active.value
@@ -122,14 +71,13 @@ export function useI18n() {
     }
   }
 
-  function t(key: string): string {
+  function t(key: MessageKey): string {
     return messages[locale.value]?.[key] ?? messages.en[key] ?? key
   }
 
   /** translated field → english → base column */
   function pick(tr: Record<string, string> | undefined | null, base: string): string {
-    if (!tr) return base
-    return tr[locale.value] || tr.en || base
+    return pickTranslation(tr, base, locale.value)
   }
 
   return { locale, active, setLocale, t, pick }

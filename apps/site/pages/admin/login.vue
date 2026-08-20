@@ -12,19 +12,24 @@ const password = ref('')
 const errorMessage = ref('')
 const pending = ref(false)
 
+const api = useApi()
+
 async function submit() {
   if (pending.value) return
   errorMessage.value = ''
   pending.value = true
 
   try {
-    await $fetch('/api/auth/login', {
+    await api('/api/auth/login', {
       method: 'POST',
       body: { username: username.value, password: password.value },
     })
   } catch (error) {
-    const status = (error as { response?: { status?: number } })?.response?.status
-    errorMessage.value = status === 401 ? 'wrong credentials' : 'something went wrong'
+    // 401 → wrong credentials; 429 and the rest come normalized from useApi
+    errorMessage.value =
+      error instanceof ApiError && error.status === 401
+        ? 'wrong credentials'
+        : (error as Error).message
     pending.value = false
     return
   }

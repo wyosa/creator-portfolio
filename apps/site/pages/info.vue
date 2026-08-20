@@ -1,6 +1,6 @@
 <script setup lang="ts">
-const { pick, locale, t } = useI18n()
-usePageTitle(() => t('info'))
+const { pick, t } = useI18n()
+useSeo(() => t('info'))
 
 const { data: settings } = await useSettings()
 
@@ -11,17 +11,10 @@ const links = computed(() =>
   ),
 )
 
-/* info text is markdown — rendered + sanitized on the client */
-const infoHtml = ref('')
-
-function renderInfo() {
-  infoHtml.value = renderMarkdown(
-    pick(settings.value?.translations?.info_text, settings.value?.info_text ?? ''),
-  )
-}
-
-onMounted(renderInfo)
-watch(locale, renderInfo)
+/* info text is markdown — rendered + sanitized isomorphically (SSR-friendly) */
+const infoHtml = computed(() =>
+  renderMarkdown(pick(settings.value?.translations?.info_text, settings.value?.info_text ?? '')),
+)
 
 function isExternal(url: string) {
   return /^https?:\/\//.test(url)
@@ -30,6 +23,7 @@ function isExternal(url: string) {
 
 <template>
   <div class="info">
+    <!-- eslint-disable-next-line vue/no-v-html -- infoHtml is sanitized by renderMarkdown -->
     <div class="info__text" v-html="infoHtml" />
     <p v-for="link in links" :key="link.url + link.label">
       <a

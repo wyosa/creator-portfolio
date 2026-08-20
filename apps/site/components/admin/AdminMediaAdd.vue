@@ -5,6 +5,8 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ changed: []; failed: [message: string] }>()
 
+const api = useApi()
+
 /* --- uploads (add photo / add video) --- */
 
 const photoInput = ref<HTMLInputElement | null>(null)
@@ -14,14 +16,15 @@ const uploading = ref(false)
 async function uploadAndCreate(file: File, type: 'photo' | 'video') {
   uploading.value = true
   try {
-    const { path, width, height } = await uploadFile(file)
-    await $fetch('/api/media', {
+    // thumb is the blurred placeholder path ('' when the api could not make one)
+    const { path, thumb, width, height } = await uploadFile(file, api)
+    await api('/api/media', {
       method: 'POST',
-      body: { type, source: 'upload', path, width, height },
+      body: { type, source: 'upload', path, thumb, width, height },
     })
     emit('changed')
-  } catch {
-    emit('failed', 'upload failed')
+  } catch (e) {
+    emit('failed', e instanceof ApiError && e.status === 429 ? e.message : 'upload failed')
   } finally {
     uploading.value = false
   }
@@ -55,7 +58,7 @@ async function addExternalVideo() {
     return
   }
   const ok = await props.runMutation(() =>
-    $fetch('/api/media', {
+    api('/api/media', {
       method: 'POST',
       body: { type: 'video', source: parsed.source, external_id: parsed.externalId },
     }),

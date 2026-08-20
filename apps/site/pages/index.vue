@@ -1,5 +1,5 @@
 <script setup lang="ts">
-usePageTitle()
+useSeo()
 
 const { data: all, error } = await useMedia()
 const { t } = useI18n()
@@ -11,12 +11,14 @@ const pageLabel = computed(() => (featured.value.length ? t('featured') : t('all
 </script>
 
 <template>
-  <p v-if="error" class="home-empty tiny">{{ t('unavailable') }}</p>
-  <template v-else>
-    <h1 v-if="items.length" class="page-title">{{ pageLabel }}</h1>
-    <JustifiedGrid v-if="items.length" :items="items" />
-    <p v-else class="home-empty tiny">{{ t('nothingHere') }}</p>
-  </template>
+  <div>
+    <p v-if="error" class="home-empty tiny">{{ t('unavailable') }}</p>
+    <template v-else>
+      <h1 v-if="items.length" class="page-title">{{ pageLabel }}</h1>
+      <JustifiedGrid v-if="items.length" :items="items" />
+      <p v-else class="home-empty tiny">{{ t('nothingHere') }}</p>
+    </template>
+  </div>
 </template>
 
 <style scoped>

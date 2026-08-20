@@ -67,16 +67,7 @@ const rows = computed<Row[]>(() => {
 })
 
 /* lightbox over the flat item list */
-const lightboxIndex = ref<number | null>(null)
-
-// vimeo grid embeds pause while the lightbox (or another tab) covers them
-watch(lightboxIndex, (v: number | null) => {
-  if (v === null) nextTick(() => resumeVimeoEmbeds(root.value))
-})
-
-function onVisible() {
-  if (document.visibilityState === 'visible') resumeVimeoEmbeds(root.value)
-}
+const { lightboxIndex } = useLightbox(root)
 
 function flatIndex(item: MediaItem): number {
   return props.items.indexOf(item)
@@ -91,8 +82,6 @@ const { observe: observeRows } = useRevealOnScroll(root, '.jgrid__row')
 watch(rows, () => nextTick(observeRows))
 
 onMounted(() => {
-  document.addEventListener('visibilitychange', onVisible)
-
   if (root.value) {
     containerWidth.value = root.value.clientWidth
     ro = new ResizeObserver((entries) => {
@@ -106,20 +95,19 @@ onMounted(() => {
 onBeforeUnmount(() => {
   ro?.disconnect()
   ro = null
-  document.removeEventListener('visibilitychange', onVisible)
 })
 </script>
 
 <template>
   <div ref="root" class="jgrid">
     <div
-      v-for="(row, ri) in rows"
-      :key="ri"
+      v-for="row in rows"
+      :key="row.items[0].id"
       class="jgrid__row"
       :style="{ height: `${row.height}px` }"
     >
       <div
-        v-for="(item, i) in row.items"
+        v-for="item in row.items"
         :key="item.id"
         class="jgrid__cell"
         :style="{ width: `${row.height * aspect(item)}px` }"

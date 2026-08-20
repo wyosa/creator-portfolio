@@ -9,19 +9,7 @@ const root = ref<HTMLElement | null>(null)
 useRevealOnScroll(root, '.media-item')
 
 /* lightbox */
-const lightboxIndex = ref<number | null>(null)
-
-// vimeo grid embeds pause while the lightbox (or another tab) covers them
-watch(lightboxIndex, (v: number | null) => {
-  if (v === null) nextTick(() => resumeVimeoEmbeds(root.value))
-})
-
-function onVisible() {
-  if (document.visibilityState === 'visible') resumeVimeoEmbeds(root.value)
-}
-
-onMounted(() => document.addEventListener('visibilitychange', onVisible))
-onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible))
+const { lightboxIndex } = useLightbox(root)
 </script>
 
 <template>

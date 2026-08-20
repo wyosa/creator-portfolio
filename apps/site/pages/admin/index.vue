@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { MediaItem } from '~/types/media'
-import type { SettingsForm } from '~/types/settings'
+import type { SettingsForm, SiteSettings } from '~/types/settings'
 import { SUPPORTED_LOCALES } from '~/types/i18n'
 
 definePageMeta({ middleware: 'auth' })
 usePageTitle('admin')
 
+const api = useApi()
 const { data: items, pending, refresh } = await useMedia()
 const { data: settings } = await useSettings()
 
@@ -34,9 +35,9 @@ async function runMutation(fn: () => Promise<unknown>, onError?: () => void): Pr
     await refresh()
     showSaved()
     return true
-  } catch {
+  } catch (e) {
     onError?.()
-    actionError.value = 'something went wrong'
+    actionError.value = e instanceof Error ? e.message : 'something went wrong'
     return false
   } finally {
     busy.value = false
@@ -59,14 +60,9 @@ const settingsForm: SettingsForm = reactive({
 })
 
 async function saveSettings() {
-  // mirror base (fallback) columns from english (or the first active lang)
-  const primary = settingsForm.languages.includes('en') ? 'en' : settingsForm.languages[0]
-  for (const f of ['site_name', 'site_subtitle', 'info_text'] as const) {
-    const v = settingsForm.tr[f][primary]
-    if (settingsForm.languages.length > 1 && v !== undefined) settingsForm[f] = v
-  }
+  syncSettingsTranslations(settingsForm)
   await runMutation(async () => {
-    const res = await $fetch('/api/settings', {
+    const res = await api<SiteSettings>('/api/settings', {
       method: 'PUT',
       body: {
         site_name: settingsForm.site_name,
@@ -77,7 +73,7 @@ async function saveSettings() {
         translations: settingsForm.tr,
       },
     })
-    settings.value = res as typeof settings.value
+    settings.value = res
   })
 }
 
@@ -85,11 +81,13 @@ async function saveSettings() {
 
 function removeItem(item: MediaItem) {
   if (!confirm(`delete "${mediaLabel(item)}"?`)) return
-  void runMutation(() => $fetch(`/api/media/${item.id}`, { method: 'DELETE' }))
+  void runMutation(() => api(`/api/media/${item.id}`, { method: 'DELETE' }))
 }
 
 function onReorder(from: number, to: number) {
-  if (!items.value.length) return
+  // check busy BEFORE the optimistic mutation — runMutation would skip the
+  // request while busy, leaving the ui out of sync with the server
+  if (busy.value || !items.value.length) return
 
   const backup = [...items.value]
   const list = [...items.value]
@@ -99,7 +97,7 @@ function onReorder(from: number, to: number) {
 
   void runMutation(
     () =>
-      $fetch('/api/media/reorder', {
+      api('/api/media/reorder', {
         method: 'PUT',
         body: { ids: list.map((m) => m.id) },
       }),
