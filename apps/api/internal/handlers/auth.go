@@ -23,6 +23,8 @@ func NewAuthHandler(cfg config.Config) *AuthHandler {
 const SessionCookieName = "portfolio_session"
 
 func (h *AuthHandler) setCookie(c *gin.Context, value string, maxAge int) {
+	// #nosec G124 -- HttpOnly and SameSite=Lax are always set; Secure is
+	// config-driven (COOKIE_SECURE) so local dev can run over plain HTTP.
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    value,

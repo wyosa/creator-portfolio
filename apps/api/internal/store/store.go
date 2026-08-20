@@ -21,6 +21,9 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+	// SQLite has a single writer; one connection serializes access and
+	// avoids SQLITE_BUSY errors under concurrent requests.
+	db.SetMaxOpenConns(1)
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -119,6 +122,12 @@ func hasColumn(db *sql.DB, table, column string) (bool, error) {
 
 func (s *Store) Close() error {
 	return s.db.Close()
+}
+
+// Ping reports whether the database is reachable; the health endpoint relies
+// on it.
+func (s *Store) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
 }
 
 const selectCols = `id, type, source, path, external_id, title, description, instagram_url, youtube_url, vimeo_url, preview_path, width, height, featured, position, created_at`
@@ -268,6 +277,13 @@ func (s *Store) SetTranslations(ctx context.Context, entity string, entityID int
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := setTranslations(ctx, tx, entity, entityID, tr); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func setTranslations(ctx context.Context, tx *sql.Tx, entity string, entityID int64, tr map[string]map[string]string) error {
 	for field, langs := range tr {
 		for lang, val := range langs {
 			if val == "" {
@@ -286,7 +302,7 @@ func (s *Store) SetTranslations(ctx context.Context, entity string, entityID int
 			}
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // LoadTranslations returns entityID → field → lang → value for the given ids.
@@ -303,6 +319,8 @@ func (s *Store) LoadTranslations(ctx context.Context, entity string, ids []int64
 		args = append(args, id)
 	}
 	rows, err := s.db.QueryContext(ctx,
+		// #nosec G202 -- the concatenated part is only literal "?"
+		// placeholders; all values stay parameterized.
 		`SELECT entity_id, field, lang, value FROM translations
 		 WHERE entity = ? AND entity_id IN (`+strings.Join(placeholders, ",")+`)`, args...)
 	if err != nil {
@@ -352,12 +370,37 @@ func (s *Store) SetSettings(ctx context.Context, kv map[string]string) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := setSettings(ctx, tx, kv); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func setSettings(ctx context.Context, tx *sql.Tx, kv map[string]string) error {
 	for k, v := range kv {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO settings (key, value) VALUES (?, ?)
 			 ON CONFLICT(key) DO UPDATE SET value = excluded.value`, k, v); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// SetSettingsAndTranslations upserts settings pairs and the settings
+// translations (entity "settings", id 0) atomically, so a failed save leaves
+// neither half applied.
+func (s *Store) SetSettingsAndTranslations(ctx context.Context, kv map[string]string, tr map[string]map[string]string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := setSettings(ctx, tx, kv); err != nil {
+		return err
+	}
+	if err := setTranslations(ctx, tx, "settings", 0, tr); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
@@ -389,22 +432,34 @@ func (s *Store) DeleteMedia(ctx context.Context, id int64) (*models.Media, error
 
 // Reorder sets position = index for each id. ids must be exactly the set of
 // existing media ids, otherwise an error is returned and nothing changes.
+// The read and the updates run in one transaction so a concurrent change
+// cannot slip between validation and write.
 func (s *Store) Reorder(ctx context.Context, ids []int64) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM media`)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = rows.Close() }()
+	defer func() { _ = tx.Rollback() }()
 
-	existing := make(map[int64]bool)
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return err
+	// Read ids inside a closure so rows are closed (via defer) before the
+	// updates below run on the same transaction.
+	existing, err := func() (map[int64]bool, error) {
+		rows, err := tx.QueryContext(ctx, `SELECT id FROM media`)
+		if err != nil {
+			return nil, err
 		}
-		existing[id] = true
-	}
-	if err := rows.Err(); err != nil {
+		defer func() { _ = rows.Close() }()
+		existing := make(map[int64]bool)
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				return nil, err
+			}
+			existing[id] = true
+		}
+		return existing, rows.Err()
+	}()
+	if err != nil {
 		return err
 	}
 	if len(ids) != len(existing) {
@@ -421,11 +476,6 @@ func (s *Store) Reorder(ctx context.Context, ids []int64) error {
 		seen[id] = true
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
 	for i, id := range ids {
 		if _, err := tx.ExecContext(ctx, `UPDATE media SET position = ? WHERE id = ?`, i, id); err != nil {
 			return err

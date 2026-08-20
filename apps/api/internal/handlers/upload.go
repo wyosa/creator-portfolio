@@ -3,7 +3,9 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -50,6 +52,29 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 		return
 	}
 
+	if kind == "video" {
+		// The extension proves nothing; sniff the content and require an
+		// actual video (photos are fully decoded below, which is stricter).
+		head := make([]byte, 512)
+		n, err := file.Read(head)
+		if err != nil && !errors.Is(err, io.EOF) {
+			failErr(c, http.StatusInternalServerError, "failed to read file", err)
+			return
+		}
+		ct := http.DetectContentType(head[:n])
+		// WHATWG sniffing recognizes mp4/webm but not QuickTime ("qt" brand),
+		// which comes back as application/octet-stream. Accept octet-stream for
+		// .mov so those uploads keep working; text/html is still rejected.
+		if !strings.HasPrefix(ct, "video/") && (ext != ".mov" || ct != "application/octet-stream") {
+			fail(c, http.StatusBadRequest, "file content is not a video")
+			return
+		}
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			failErr(c, http.StatusInternalServerError, "failed to read file", err)
+			return
+		}
+	}
+
 	randBytes := make([]byte, 8)
 	if _, err := rand.Read(randBytes); err != nil {
 		failErr(c, http.StatusInternalServerError, "failed to generate filename", err)
@@ -57,6 +82,8 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 	}
 	name := hex.EncodeToString(randBytes) + ext
 	diskPath := filepath.Join(h.mediaDir, name)
+	// #nosec G304 -- the filename is a random hex string generated above,
+	// not client input.
 	dst, err := os.Create(diskPath)
 	if err != nil {
 		failErr(c, http.StatusInternalServerError, "failed to save file", err)
@@ -88,7 +115,11 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 		}
 		bounds := img.Bounds()
 		width, height = bounds.Dx(), bounds.Dy()
-		if err := generateThumb(img, diskPath); err == nil {
+		// Best-effort: a thumb failure leaves the photo without a
+		// placeholder, the upload itself still succeeds.
+		if err := generateThumb(img, diskPath); err != nil {
+			slog.Warn("failed to generate thumbnail", "path", diskPath, "error", err)
+		} else {
 			thumb = ThumbWebPath("/media/" + name)
 		}
 	}

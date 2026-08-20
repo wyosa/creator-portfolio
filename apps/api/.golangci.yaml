@@ -6,6 +6,11 @@ linters:
     - govet
     - staticcheck
     - unused
+    - gosec
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - gocritic
 
 formatters:
   enable:

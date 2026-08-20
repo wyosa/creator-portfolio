@@ -190,3 +190,146 @@ func TestDelete(t *testing.T) {
 		t.Fatalf("expected 0 items, got %d", len(items))
 	}
 }
+
+func TestTranslations(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	m := createMedia(t, st, &models.Media{Type: "photo", Source: "upload", Path: "/media/t.jpg"})
+
+	tr := map[string]map[string]string{
+		"title":       {"en": "hello", "ru": "привет"},
+		"description": {"en": "desc"},
+	}
+	if err := st.SetTranslations(ctx, "media", m.ID, tr); err != nil {
+		t.Fatalf("set translations: %v", err)
+	}
+
+	loaded, err := st.LoadTranslations(ctx, "media", []int64{m.ID})
+	if err != nil {
+		t.Fatalf("load translations: %v", err)
+	}
+	if got := loaded[m.ID]["title"]["en"]; got != "hello" {
+		t.Fatalf("title.en = %q, want hello", got)
+	}
+	if got := loaded[m.ID]["title"]["ru"]; got != "привет" {
+		t.Fatalf("title.ru = %q, want привет", got)
+	}
+	if got := loaded[m.ID]["description"]["en"]; got != "desc" {
+		t.Fatalf("description.en = %q, want desc", got)
+	}
+
+	// Upsert overwrites, empty value deletes the row.
+	if err := st.SetTranslations(ctx, "media", m.ID, map[string]map[string]string{
+		"title":       {"en": "hi", "ru": ""},
+		"description": {"en": ""},
+	}); err != nil {
+		t.Fatalf("update translations: %v", err)
+	}
+	loaded, err = st.LoadTranslations(ctx, "media", []int64{m.ID})
+	if err != nil {
+		t.Fatalf("reload translations: %v", err)
+	}
+	if got := loaded[m.ID]["title"]["en"]; got != "hi" {
+		t.Fatalf("title.en = %q, want hi", got)
+	}
+	if _, ok := loaded[m.ID]["title"]["ru"]; ok {
+		t.Fatal("title.ru should be deleted after empty upsert")
+	}
+	if _, ok := loaded[m.ID]["description"]; ok {
+		t.Fatal("description should be deleted after empty upsert")
+	}
+
+	// Unknown ids load nothing; empty id list is a no-op.
+	loaded, err = st.LoadTranslations(ctx, "media", []int64{99999})
+	if err != nil {
+		t.Fatalf("load unknown id: %v", err)
+	}
+	if len(loaded) != 0 {
+		t.Fatalf("expected empty map for unknown id, got %#v", loaded)
+	}
+	if _, err := st.LoadTranslations(ctx, "media", nil); err != nil {
+		t.Fatalf("load empty ids: %v", err)
+	}
+}
+
+func TestSettings(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	kv, err := st.GetSettings(ctx)
+	if err != nil {
+		t.Fatalf("get empty settings: %v", err)
+	}
+	if len(kv) != 0 {
+		t.Fatalf("expected no settings, got %#v", kv)
+	}
+
+	if err := st.SetSettings(ctx, map[string]string{"a": "1", "b": "2"}); err != nil {
+		t.Fatalf("set settings: %v", err)
+	}
+	// Upsert overwrites a single key, leaving the rest untouched.
+	if err := st.SetSettings(ctx, map[string]string{"a": "3"}); err != nil {
+		t.Fatalf("update settings: %v", err)
+	}
+	kv, err = st.GetSettings(ctx)
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	if kv["a"] != "3" || kv["b"] != "2" {
+		t.Fatalf("settings = %#v, want a=3 b=2", kv)
+	}
+}
+
+func TestSetSettingsAndTranslations(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	kv := map[string]string{"site_name": "Name"}
+	tr := map[string]map[string]string{"site_name": {"ru": "Имя"}}
+	if err := st.SetSettingsAndTranslations(ctx, kv, tr); err != nil {
+		t.Fatalf("set settings and translations: %v", err)
+	}
+
+	settings, err := st.GetSettings(ctx)
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	if settings["site_name"] != "Name" {
+		t.Fatalf("site_name = %q, want Name", settings["site_name"])
+	}
+	loaded, err := st.LoadTranslations(ctx, "settings", []int64{0})
+	if err != nil {
+		t.Fatalf("load translations: %v", err)
+	}
+	if got := loaded[0]["site_name"]["ru"]; got != "Имя" {
+		t.Fatalf("settings translation = %q, want Имя", got)
+	}
+}
+
+func TestReorderEdgeCases(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	// Empty store: empty id list is a valid no-op.
+	if err := st.Reorder(ctx, nil); err != nil {
+		t.Fatalf("reorder empty store: %v", err)
+	}
+
+	m := createMedia(t, st, &models.Media{Type: "photo", Source: "upload", Path: "/media/solo.jpg", Title: "keep me"})
+	if err := st.Reorder(ctx, []int64{m.ID}); err != nil {
+		t.Fatalf("reorder single item: %v", err)
+	}
+
+	// Reorder must not clobber other fields.
+	got, err := st.GetMedia(ctx, m.ID)
+	if err != nil {
+		t.Fatalf("get media: %v", err)
+	}
+	if got.Title != "keep me" {
+		t.Fatalf("title = %q after reorder, want untouched", got.Title)
+	}
+	if got.Position != 0 {
+		t.Fatalf("position = %d after single reorder, want 0", got.Position)
+	}
+}

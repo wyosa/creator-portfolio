@@ -1,9 +1,11 @@
 package handlers
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -15,7 +17,7 @@ func fail(c *gin.Context, status int, msg string) {
 
 // failErr logs the underlying error and writes a JSON error response.
 func failErr(c *gin.Context, status int, msg string, err error) {
-	log.Printf("%s: %v", msg, err)
+	slog.Error(msg, "error", err)
 	fail(c, status, msg)
 }
 
@@ -27,4 +29,20 @@ func parseID(c *gin.Context) (int64, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+// hasURLScheme reports whether raw parses as a URL using one of the allowed
+// schemes (compared case-insensitively). It rejects scheme-relative and
+// schemeless strings as well as dangerous schemes like javascript:.
+func hasURLScheme(raw string, schemes ...string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	for _, s := range schemes {
+		if strings.EqualFold(u.Scheme, s) {
+			return true
+		}
+	}
+	return false
 }

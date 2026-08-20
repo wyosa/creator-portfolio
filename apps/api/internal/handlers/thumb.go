@@ -36,6 +36,8 @@ func ThumbWebPath(webPath string) string {
 // decodeImage reads a photo, checking the header dimensions against
 // maxImagePixels before decoding the full image.
 func decodeImage(filePath string) (image.Image, error) {
+	// #nosec G304 -- filePath is built from a server-generated random
+	// filename by the upload handler.
 	f, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
@@ -59,15 +61,25 @@ func decodeImage(filePath string) (image.Image, error) {
 	return src, nil
 }
 
-// generateThumb writes a tiny jpeg placeholder next to the photo.
+// thumbMaxSide bounds both sides of the generated placeholder.
+const thumbMaxSide = 32
+
+// generateThumb writes a tiny jpeg placeholder next to the photo, scaling by
+// the longer side so tall narrow images stay bounded too.
 // Best-effort: an encode failure just means the photo has no placeholder,
 // the upload itself still succeeds.
 func generateThumb(src image.Image, filePath string) error {
 	bounds := src.Bounds()
 	w, h := bounds.Dx(), bounds.Dy()
-	if w > 32 {
-		h = h * 32 / w
-		w = 32
+	if w >= h && w > thumbMaxSide {
+		h = h * thumbMaxSide / w
+		w = thumbMaxSide
+	} else if h > thumbMaxSide {
+		w = w * thumbMaxSide / h
+		h = thumbMaxSide
+	}
+	if w < 1 {
+		w = 1
 	}
 	if h < 1 {
 		h = 1

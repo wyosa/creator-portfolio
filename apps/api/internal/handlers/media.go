@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -73,6 +75,14 @@ type createMediaRequest struct {
 	Translations map[string]map[string]string `json:"translations"`
 }
 
+// maxDimension bounds client-supplied pixel dimensions.
+const maxDimension = 100000
+
+// validMediaURL allows an empty value (field unset) or an http/https URL.
+func validMediaURL(u string) bool {
+	return u == "" || hasURLScheme(strings.TrimSpace(u), "http", "https")
+}
+
 func (h *MediaHandler) Create(c *gin.Context) {
 	var req createMediaRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -125,6 +135,20 @@ func (h *MediaHandler) Create(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "source must be 'upload', 'youtube' or 'vimeo'")
 		return
 	}
+	if req.Width < 0 || req.Width > maxDimension || req.Height < 0 || req.Height > maxDimension {
+		fail(c, http.StatusBadRequest, "width and height must be between 0 and 100000")
+		return
+	}
+	for field, u := range map[string]string{
+		"instagram_url": req.InstagramURL,
+		"youtube_url":   req.YoutubeURL,
+		"vimeo_url":     req.VimeoURL,
+	} {
+		if !validMediaURL(u) {
+			fail(c, http.StatusBadRequest, field+" must be an http or https URL")
+			return
+		}
+	}
 	if req.Translations != nil {
 		if err := validateTranslations(req.Translations, mediaTranslatableFields); err != nil {
 			fail(c, http.StatusBadRequest, err.Error())
@@ -157,8 +181,12 @@ func (h *MediaHandler) Create(c *gin.Context) {
 			return
 		}
 		created, err = h.store.GetMedia(c.Request.Context(), created.ID)
-		if err != nil || created == nil {
+		if err != nil {
 			failErr(c, http.StatusInternalServerError, "failed to reload media", err)
+			return
+		}
+		if created == nil {
+			fail(c, http.StatusInternalServerError, "failed to reload media")
 			return
 		}
 	}
@@ -195,6 +223,16 @@ func (h *MediaHandler) Update(c *gin.Context) {
 			}
 		}
 		req.PreviewPath = &p
+	}
+	for field, u := range map[string]*string{
+		"instagram_url": req.InstagramURL,
+		"youtube_url":   req.YoutubeURL,
+		"vimeo_url":     req.VimeoURL,
+	} {
+		if u != nil && !validMediaURL(*u) {
+			fail(c, http.StatusBadRequest, field+" must be an http or https URL")
+			return
+		}
 	}
 	if req.Translations != nil {
 		if err := validateTranslations(req.Translations, mediaTranslatableFields); err != nil {
@@ -233,10 +271,21 @@ func (h *MediaHandler) Update(c *gin.Context) {
 			return
 		}
 		updated, err = h.store.GetMedia(c.Request.Context(), id)
-		if err != nil || updated == nil {
+		if err != nil {
 			failErr(c, http.StatusInternalServerError, "failed to reload media", err)
 			return
 		}
+		if updated == nil {
+			fail(c, http.StatusInternalServerError, "failed to reload media")
+			return
+		}
+	}
+
+	// A replaced preview leaves the old file behind; remove it unless it
+	// doubles as the media file itself.
+	if req.PreviewPath != nil && existing.PreviewPath != "" &&
+		existing.PreviewPath != *req.PreviewPath && existing.PreviewPath != existing.Path {
+		h.removeUpload(existing.PreviewPath)
 	}
 	c.JSON(http.StatusOK, updated)
 }
@@ -256,18 +305,26 @@ func (h *MediaHandler) Delete(c *gin.Context) {
 		return
 	}
 	if deleted.Source == "upload" && deleted.Path != "" {
-		if diskPath, ok := h.uploadDiskPath(deleted.Path); ok {
-			_ = os.Remove(diskPath)
-			// the blurred placeholder generated on upload, if any
-			_ = os.Remove(ThumbDiskPath(diskPath))
-		}
+		h.removeUpload(deleted.Path)
 	}
 	if deleted.PreviewPath != "" && deleted.PreviewPath != deleted.Path {
-		if diskPath, ok := h.uploadDiskPath(deleted.PreviewPath); ok {
-			_ = os.Remove(diskPath)
-		}
+		h.removeUpload(deleted.PreviewPath)
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// removeUpload deletes an uploaded file along with the thumbnail generated
+// next to it, if any. Missing files are fine, other failures are logged.
+func (h *MediaHandler) removeUpload(webPath string) {
+	diskPath, ok := h.uploadDiskPath(webPath)
+	if !ok {
+		return
+	}
+	for _, p := range []string{diskPath, ThumbDiskPath(diskPath)} {
+		if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+			slog.Warn("failed to remove file", "path", p, "error", err)
+		}
+	}
 }
 
 // uploadDiskPath maps a stored path like /media/<name> to a file under

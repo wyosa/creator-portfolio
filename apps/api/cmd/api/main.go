@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,15 +16,25 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	os.Exit(run())
+}
 
-	if err := os.MkdirAll(cfg.MediaDir(), 0o755); err != nil {
-		log.Fatalf("failed to create data dirs: %v", err)
+func run() int {
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("invalid configuration", "error", err)
+		return 1
+	}
+
+	if err := os.MkdirAll(cfg.MediaDir(), 0o750); err != nil {
+		slog.Error("failed to create data dirs", "error", err)
+		return 1
 	}
 
 	st, err := store.Open(cfg.DBPath())
 	if err != nil {
-		log.Fatalf("failed to open store: %v", err)
+		slog.Error("failed to open store", "error", err)
+		return 1
 	}
 	defer func() { _ = st.Close() }()
 
@@ -35,24 +45,39 @@ func main() {
 		Handler:           r,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,
-		WriteTimeout:      120 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		// WriteTimeout must cover streaming video files up to 1 GiB on slow
+		// connections, not just API responses.
+		WriteTimeout: 10 * time.Minute,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	serveErr := make(chan error, 1)
 	go func() {
-		<-ctx.Done()
+		slog.Info("listening", "addr", srv.Addr)
+		serveErr <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serveErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("server error", "error", err)
+			return 1
+		}
+	case <-ctx.Done():
+		// Shutdown in the main flow and wait for it so in-flight requests
+		// finish before the process exits.
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
-			log.Printf("graceful shutdown: %v", err)
+			slog.Error("graceful shutdown", "error", err)
 		}
-	}()
-
-	log.Printf("listening on %s", srv.Addr)
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalf("server error: %v", err)
+		if err := <-serveErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("server error", "error", err)
+			return 1
+		}
 	}
+	return 0
 }

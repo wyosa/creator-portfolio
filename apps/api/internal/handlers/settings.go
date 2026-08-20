@@ -2,9 +2,8 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"api/internal/store"
@@ -62,7 +61,7 @@ func (h *SettingsHandler) Get(c *gin.Context) {
 	if raw := kv[keyInfoLinks]; raw != "" {
 		var parsed []infoLink
 		if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-			log.Printf("settings: ignoring invalid %s JSON: %v", keyInfoLinks, err)
+			slog.Warn("settings: ignoring invalid JSON", "key", keyInfoLinks, "error", err)
 		} else if parsed != nil {
 			links = parsed
 		}
@@ -72,7 +71,7 @@ func (h *SettingsHandler) Get(c *gin.Context) {
 	if raw := kv[keyLanguages]; raw != "" {
 		var parsed []string
 		if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-			log.Printf("settings: ignoring invalid %s JSON: %v", keyLanguages, err)
+			slog.Warn("settings: ignoring invalid JSON", "key", keyLanguages, "error", err)
 		} else if len(parsed) > 0 {
 			languages = parsed
 		}
@@ -144,14 +143,7 @@ func (h *SettingsHandler) Update(c *gin.Context) {
 				fail(c, http.StatusBadRequest, "links need both label and url")
 				return
 			}
-			u, err := url.Parse(links[i].URL)
-			if err != nil {
-				fail(c, http.StatusBadRequest, "invalid link url")
-				return
-			}
-			switch strings.ToLower(u.Scheme) {
-			case "http", "https", "mailto":
-			default:
+			if !hasURLScheme(links[i].URL, "http", "https", "mailto") {
 				fail(c, http.StatusBadRequest, "link urls must use http, https or mailto")
 				return
 			}
@@ -189,19 +181,20 @@ func (h *SettingsHandler) Update(c *gin.Context) {
 			fail(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		if err := h.store.SetTranslations(c.Request.Context(), "settings", 0, req.Translations); err != nil {
-			failErr(c, http.StatusInternalServerError, "failed to save translations", err)
-			return
-		}
 	}
 
-	if len(kv) == 0 {
-		h.Get(c)
-		return
-	}
-	if err := h.store.SetSettings(c.Request.Context(), kv); err != nil {
-		failErr(c, http.StatusInternalServerError, "failed to save settings", err)
-		return
+	if req.Translations != nil {
+		// kv pairs and translations go in one transaction: a partial save
+		// would leave the admin UI inconsistent.
+		if err := h.store.SetSettingsAndTranslations(c.Request.Context(), kv, req.Translations); err != nil {
+			failErr(c, http.StatusInternalServerError, "failed to save settings", err)
+			return
+		}
+	} else if len(kv) > 0 {
+		if err := h.store.SetSettings(c.Request.Context(), kv); err != nil {
+			failErr(c, http.StatusInternalServerError, "failed to save settings", err)
+			return
+		}
 	}
 	h.Get(c)
 }
