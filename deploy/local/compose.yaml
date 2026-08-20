@@ -1,0 +1,30 @@
+name: portfolio-local
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/local/docker/api.dockerfile
+    env_file: ./.env
+    environment:
+      PORT: '8080'
+      DATA_DIR: /data
+      GIN_MODE: release
+    volumes:
+      - ./data:/data
+    ports:
+      - '8080:8080'
+    restart: unless-stopped
+
+  site:
+    build:
+      context: ../..
+      dockerfile: deploy/local/docker/site.dockerfile
+    environment:
+      NUXT_API_PROXY: http://api:8080
+      NUXT_TELEMETRY_DISABLED: '1'
+    ports:
+      - '3000:3000'
+    depends_on:
+      - api
+    restart: unless-stopped

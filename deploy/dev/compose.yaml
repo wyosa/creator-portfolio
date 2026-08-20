@@ -1,0 +1,38 @@
+name: portfolio-dev
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/dev/docker/api.dockerfile
+    env_file: ./docker/.env
+    environment:
+      PORT: '8080'
+      DATA_DIR: /data
+    volumes:
+      - ../../apps/api:/app
+      - ./data:/data
+      - api-gomod:/go/pkg/mod
+      - api-gocache:/root/.cache/go-build
+    ports:
+      - '8080:8080'
+
+  site:
+    build:
+      context: ../..
+      dockerfile: deploy/dev/docker/site.dockerfile
+    environment:
+      NUXT_API_PROXY: http://api:8080
+      NUXT_TELEMETRY_DISABLED: '1'
+      CHOKIDAR_USEPOLLING: '1'
+    volumes:
+      - ../../apps/site:/app
+      - /app/node_modules
+    ports:
+      - '3000:3000'
+    depends_on:
+      - api
+
+volumes:
+  api-gomod:
+  api-gocache:

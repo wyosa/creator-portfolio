@@ -1,0 +1,8 @@
+'apps/api/**/*.go':
+  - gofmt -w
+
+'apps/site/**/*.{js,ts,vue,css,json}':
+  - prettier --write
+
+'*.{md,yaml,yml}':
+  - prettier --write

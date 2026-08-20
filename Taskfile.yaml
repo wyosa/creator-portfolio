@@ -1,0 +1,135 @@
+version: '3'
+
+vars:
+  DEV_COMPOSE: deploy/dev/compose.yaml
+  LOCAL_COMPOSE: deploy/local/compose.yaml
+
+tasks:
+  default:
+    silent: true
+    cmd: task --list-all
+
+  ## ---------- docker: dev (hot reload) ----------
+
+  dev:
+    desc: Start dev stack (api hot-reload via air + nuxt dev server)
+    cmds:
+      - docker compose -f {{.DEV_COMPOSE}} up --build
+
+  dev:down:
+    desc: Stop dev stack
+    cmds:
+      - docker compose -f {{.DEV_COMPOSE}} down
+
+  dev:logs:
+    desc: Tail dev stack logs
+    cmds:
+      - docker compose -f {{.DEV_COMPOSE}} logs -f
+
+  ## ---------- docker: local (built apps) ----------
+
+  local:
+    desc: Build and start production-like stack (built images)
+    cmds:
+      - docker compose -f {{.LOCAL_COMPOSE}} up --build -d
+
+  local:down:
+    desc: Stop local stack
+    cmds:
+      - docker compose -f {{.LOCAL_COMPOSE}} down
+
+  local:logs:
+    desc: Tail local stack logs
+    cmds:
+      - docker compose -f {{.LOCAL_COMPOSE}} logs -f
+
+  build:
+    desc: Build production images without starting
+    cmds:
+      - docker compose -f {{.LOCAL_COMPOSE}} build
+
+  ## ---------- host: api ----------
+
+  api:run:
+    desc: Run api on host (go run, DATA_DIR=deploy/dev/data)
+    dir: apps/api
+    env:
+      DATA_DIR: ../../deploy/dev/data
+    cmds:
+      - go run ./cmd/api
+
+  api:test:
+    desc: Run api tests
+    dir: apps/api
+    cmds:
+      - go test ./...
+
+  api:vet:
+    desc: go vet api
+    dir: apps/api
+    cmds:
+      - go vet ./...
+
+  api:lint:
+    desc: golangci-lint api (if installed)
+    dir: apps/api
+    cmds:
+      - golangci-lint run
+
+  api:build:
+    desc: Build api packages
+    dir: apps/api
+    cmds:
+      - go build ./...
+
+  api:tidy:
+    desc: Tidy go.mod
+    dir: apps/api
+    cmds:
+      - go mod tidy
+
+  ## ---------- host: site ----------
+
+  site:dev:
+    desc: Run nuxt dev server on host (proxies to localhost:8080)
+    dir: apps/site
+    env:
+      NUXT_TELEMETRY_DISABLED: '1'
+    cmds:
+      - npm run dev
+
+  site:build:
+    desc: Build nuxt site on host
+    dir: apps/site
+    env:
+      NUXT_TELEMETRY_DISABLED: '1'
+    cmds:
+      - npm run build
+
+  site:typecheck:
+    desc: Typecheck site (vue-tsc)
+    dir: apps/site
+    env:
+      NUXT_TELEMETRY_DISABLED: '1'
+    cmds:
+      - npm run typecheck
+
+  ## ---------- misc ----------
+
+  setup:
+    desc: Install dependencies (go modules + npm packages)
+    cmds:
+      - cmd: go -C apps/api mod download
+      - cmd: npm --prefix apps/site install
+        env:
+          NUXT_TELEMETRY_DISABLED: '1'
+
+  test:
+    desc: Run all host-side checks (api tests + site typecheck + site build)
+    deps: [api:vet, api:test, site:typecheck, site:build]
+
+  ps:
+    desc: Show running containers of both stacks
+    cmds:
+      - docker compose -f {{.DEV_COMPOSE}} ps
+      - docker compose -f {{.LOCAL_COMPOSE}} ps

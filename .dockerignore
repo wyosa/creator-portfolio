@@ -1,0 +1,9 @@
+.git
+.kimi-code
+**/node_modules
+**/.nuxt
+**/.output
+apps/api/tmp
+deploy/*/data
+*.log
+.DS_Store

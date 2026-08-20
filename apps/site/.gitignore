@@ -1,0 +1,11 @@
+# dependencies
+node_modules/
+
+# build output
+.nuxt/
+.output/
+dist/
+
+# misc
+*.log
+.DS_Store

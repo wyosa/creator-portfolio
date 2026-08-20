@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+
+# build output
+.nuxt/
+.output/
+dist/
+
+# go
+apps/api/tmp/
+apps/api/api
+coverage.out
+
+# runtime data (uploaded media + sqlite), keep only .gitkeep placeholders
+deploy/*/data/*
+!deploy/*/data/media/
+deploy/*/data/media/*
+!deploy/*/data/media/.gitkeep
+
+# secrets
+.env
+!.env.example
+
+# local tooling
+.kimi-code/
+
+# editors
+.idea/
+.vscode/
+
+# misc
+*.log
+.DS_Store
