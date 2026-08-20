@@ -1,1 +1,1 @@
-![creator-portfolio](.github/screenshot.jpg)
+![creator-portfolio](.github/screenshot.png)
